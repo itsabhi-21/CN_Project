@@ -1,0 +1,48 @@
+# ===== Team __TEAM__ edge (Mac 2) - PHASE 1 =====
+# Installed as: __BREW_PREFIX__/etc/nginx/servers/team.conf
+# (Homebrew's nginx.conf already does `include servers/*;` inside http{})
+
+log_format team_lb '$remote_addr:$remote_port "$request" $status '
+                   'upstream=$upstream_addr up_status=$upstream_status '
+                   'tls=$ssl_protocol rt=$request_time';
+
+# The pool of backends. Default algorithm = round robin.
+# (alternative: add `least_conn;` and explain it in the viva)
+upstream team_backends {
+    server __MAC3_IP__:__PORT_A__;   # Backend A (Mac 3)
+    server __MAC4_IP__:__PORT_B__;   # Backend B (Mac 4)
+}
+
+# Plain HTTP -> redirect to HTTPS
+server {
+    listen __HTTP_PORT__;
+    server_name app.__TEAM__.test api.__TEAM__.test;
+    return 301 https://$host:__HTTPS_PORT__$request_uri;
+}
+
+# HTTPS: TLS terminates HERE; backends receive plain HTTP on the LAN
+server {
+    listen __HTTPS_PORT__ ssl;
+    http2 on;                               # nginx >= 1.25.1
+    server_name app.__TEAM__.test api.__TEAM__.test;
+
+    ssl_certificate     __BREW_PREFIX__/etc/nginx/certs/server.crt;
+    ssl_certificate_key __BREW_PREFIX__/etc/nginx/certs/server.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    access_log /tmp/nginx-team-access.log team_lb;
+    error_log  /tmp/nginx-team-error.log  warn;
+
+    add_header X-Edge     $hostname       always;  # which edge answered
+    add_header X-Upstream $upstream_addr  always;  # which backend IP:port
+
+    location / {
+        proxy_pass http://team_backends;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection        "";
+    }
+}

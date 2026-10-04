@@ -1,0 +1,61 @@
+# ===== Team __TEAM__ edge - PHASE 2 (HA failover) =====
+# Same file is used on the primary edge (Mac 2) and the standby edge
+# (Mac 3) for Extension E. X-Edge shows which machine answered.
+
+log_format team_lb '$remote_addr:$remote_port "$request" $status '
+                   'upstream=$upstream_addr up_status=$upstream_status '
+                   'tls=$ssl_protocol rt=$request_time';
+
+upstream team_backends {
+    # Passive health checking (open-source nginx):
+    #   after max_fails failed attempts inside fail_timeout, the server is
+    #   marked unavailable for fail_timeout seconds, then retried.
+    server __MAC3_IP__:__PORT_A__ max_fails=1 fail_timeout=10s;  # A
+    server __MAC4_IP__:__PORT_B__ max_fails=1 fail_timeout=10s;  # B
+}
+
+server {
+    listen __HTTP_PORT__;
+    server_name app.__TEAM__.test api.__TEAM__.test;
+    return 301 https://$host:__HTTPS_PORT__$request_uri;
+}
+
+server {
+    listen __HTTPS_PORT__ ssl;
+    http2 on;
+    server_name app.__TEAM__.test api.__TEAM__.test;
+
+    ssl_certificate     __BREW_PREFIX__/etc/nginx/certs/server.crt;
+    ssl_certificate_key __BREW_PREFIX__/etc/nginx/certs/server.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    access_log /tmp/nginx-team-access.log team_lb;
+    error_log  /tmp/nginx-team-error.log  warn;
+
+    add_header X-Edge     $hostname      always;
+    add_header X-Upstream $upstream_addr always;
+
+    # The edge's own liveness endpoint (does not touch the backends)
+    location = /edge-health {
+        access_log off;
+        default_type text/plain;
+        return 200 "edge ok: $hostname\n";
+    }
+
+    location / {
+        proxy_pass http://team_backends;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection        "";
+
+        # Fail fast and retry the OTHER backend - the client never sees
+        # the failure. GET is idempotent, so retrying is safe.
+        proxy_connect_timeout 2s;
+        proxy_read_timeout    5s;
+        proxy_next_upstream   error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 2;
+    }
+}

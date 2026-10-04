@@ -1,0 +1,13 @@
+# ===== Team __TEAM__ backend isolation (Extension C) =====
+# Loaded into anchor com.apple/team-isolation (macOS's /etc/pf.conf already
+# evaluates every com.apple/* anchor) - so /etc/pf.conf is NEVER edited.
+# Rules marked `quick` stop evaluation at the first match.
+
+edge    = "__MAC2_IP__"
+backend_ports = "{ __PORT_A__, __PORT_B__ }"
+
+pass  in quick on lo0 all                                       # local tests
+pass  in quick proto tcp from $edge to any port $backend_ports  # nginx only
+# Uncomment during Ext E if the standby edge must reach the backends:
+# pass in quick proto tcp from __STANDBY_EDGE_IP__ to any port $backend_ports
+block drop in quick proto tcp from any to any port $backend_ports  # all else
