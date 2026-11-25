@@ -1,0 +1,21 @@
+# Rendered build artifacts
+build/
+
+# TLS private keys and intermediate cert material (NEVER commit private keys)
+tls/out/*.key
+tls/out/*.csr
+tls/out/*.srl
+tls/out/*.cnf
+tls/out/*.ext
+
+# Firewall rollback state
+firewall/rollback/
+
+# Python / macOS / IDE noise
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.DS_Store
+*.swp
+*~
