@@ -18,7 +18,12 @@ if grep -rn '__[A-Z0-9_]*__' build/; then
 fi
 
 # Verify expected rendered files exist
-for expected in build/dns/dnsmasq.conf build/dns/team.hosts build/nginx/edge-phase1.conf; do
+for expected in \
+  build/dns/dnsmasq.conf \
+  build/dns/team.hosts \
+  build/nginx/edge-phase1.conf \
+  build/nginx/edge-phase2.conf \
+  build/firewall/backend-pf.conf; do
   if [[ ! -f "$expected" ]]; then
     echo "FAIL: missing rendered file $expected" >&2
     exit 1

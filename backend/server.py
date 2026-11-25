@@ -9,6 +9,7 @@ Endpoints:
   GET /             small HTML page (no-store, so browser refresh shows LB)
   GET /api/status   JSON {backend, status, ...}  (no-store)
   GET /api/catalog  cacheable JSON: Cache-Control max-age=60 + ETag -> 304
+  GET /api/metrics  JSON request/cache counters for Phase 2 observability
   GET /health       plain "ok" (for nginx / scripts)
 Every response carries the header X-Backend: A|B.
 """
@@ -16,6 +17,7 @@ import argparse
 import hashlib
 import json
 import socket
+import threading
 import time
 from email.utils import formatdate
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -39,6 +41,16 @@ def make_handler(backend_name: str, port: int, hostname: str | None = None, star
     """Build a request handler class bound to a specific backend identity."""
     host_label = hostname or socket.gethostname()
     start_ts = started_at if started_at is not None else time.time()
+    metrics_lock = threading.Lock()
+    metrics = {
+        "requests_total": 0,
+        "cache_hits_304": 0,
+        "not_found_404": 0,
+    }
+
+    def _record_metric(key: str, amount: int = 1):
+        with metrics_lock:
+            metrics[key] += amount
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -61,6 +73,7 @@ def make_handler(backend_name: str, port: int, hostname: str | None = None, star
 
         def do_GET(self):
             path = self.path.split("?", 1)[0]
+            _record_metric("requests_total")
 
             if path == "/":
                 html = (
@@ -102,14 +115,31 @@ def make_handler(backend_name: str, port: int, hostname: str | None = None, star
                 inm = self.headers.get("If-None-Match", "")
                 tags = [t.strip().removeprefix("W/") for t in inm.split(",")]
                 if CATALOG_ETAG in tags or inm.strip() == "*":
+                    _record_metric("cache_hits_304")
                     self._send(304, headers=cache_hdrs)
                 else:
                     self._send(200, CATALOG_BODY, headers=cache_hdrs)
+
+            elif path == "/api/metrics":
+                with metrics_lock:
+                    snapshot = dict(metrics)
+                self._json(
+                    200,
+                    {
+                        "backend": backend_name,
+                        "host": host_label,
+                        "port": port,
+                        "uptime_s": round(time.time() - start_ts, 1),
+                        **snapshot,
+                    },
+                    {"Cache-Control": "no-store"},
+                )
 
             elif path == "/health":
                 self._send(200, b"ok\n", "text/plain")
 
             else:
+                _record_metric("not_found_404")
                 self._json(404, {"error": "not found", "path": path})
 
         do_HEAD = do_GET  # so `curl -I` works
