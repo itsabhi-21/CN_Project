@@ -79,6 +79,27 @@ class BackendServerTests(unittest.TestCase):
             urllib.request.urlopen(f"{self.base}/does-not-exist")
         self.assertEqual(ctx.exception.code, 404)
 
+    def test_metrics_endpoint_counts_requests(self):
+        with urllib.request.urlopen(f"{self.base}/api/metrics") as resp:
+            self.assertEqual(resp.status, 200)
+            self.assertEqual(resp.headers["Cache-Control"], "no-store")
+            before = json.loads(resp.read().decode())
+
+        req_304 = urllib.request.Request(
+            f"{self.base}/api/catalog",
+            headers={"If-None-Match": CATALOG_ETAG},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req_304)
+        self.assertEqual(ctx.exception.code, 304)
+
+        with urllib.request.urlopen(f"{self.base}/api/metrics") as resp:
+            after = json.loads(resp.read().decode())
+
+        self.assertEqual(after["backend"], "A")
+        self.assertGreaterEqual(after["requests_total"], before["requests_total"] + 2)
+        self.assertGreaterEqual(after["cache_hits_304"], before["cache_hits_304"] + 1)
+
 
 if __name__ == "__main__":
     unittest.main()
