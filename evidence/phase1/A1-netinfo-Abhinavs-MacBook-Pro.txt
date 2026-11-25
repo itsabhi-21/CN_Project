@@ -1,0 +1,9 @@
+
+[1m== Abhinavs-MacBook-Pro.local  -  interface en0 ==[0m
+IPv4 address : 10.142.107.114
+Subnet mask  : 255.255.255.0
+Prefix       : 0xffffff00  (hex mask)
+Gateway      : 10.142.107.38
+Default if   : en0
+MAC address  : 1a:35:41:07:ba:21
+DNS servers  : There aren't any DNS Servers set on Wi-Fi. 

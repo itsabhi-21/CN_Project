@@ -1,0 +1,16 @@
+# ---- Team __TEAM__ private DNS (dnsmasq) ----
+# Same file on the primary (Mac 1) and the backup (Phase 2, Mac 3).
+port=53
+domain-needed          # never forward plain names without a dot
+bogus-priv             # never forward reverse lookups for private ranges
+no-resolv              # ignore /etc/resolv.conf ...
+server=__UPSTREAM_DNS__  # ... and forward everything else here
+local=/__TEAM__.test/  # we are the only source of truth for *.__TEAM__.test
+                       # (unknown names return NXDOMAIN, never forwarded)
+# Project records live in a hosts-style file so they can be changed
+# live with `sudo pkill -HUP dnsmasq` (Ext B / Ext E):
+addn-hosts=__BREW_PREFIX__/etc/dnsmasq.d/team.hosts
+local-ttl=__DNS_TTL__  # TTL (seconds) handed out for our records
+cache-size=1000
+log-queries
+log-facility=/tmp/dnsmasq.log
